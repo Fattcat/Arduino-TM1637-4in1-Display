@@ -60,10 +60,16 @@ void loop() {
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
     colonVisible = !colonVisible;  // Zmena stavu dvojbodky
+  }
 
-    // Zobrazenie času s alebo bez dvojbodky na TM1637 displeji
-    int displayTime = (hours.toInt() * 100) + minutes.toInt();
-    display.showNumberDecEx(displayTime, colonVisible ? 0x80 : 0x00, true); // Zobraz číslo s dvojbodkou
+  // Zobrazenie času s alebo bez dvojbodky na TM1637 displeji
+  int displayTime = (hours.toInt() * 100) + minutes.toInt();
+  
+  // Zobrazenie s dvojbodkou medzi hodinami a minútami
+  if (colonVisible) {
+    display.showNumberDecEx(displayTime, 0x40, true); // 0x40 maska pre dvojbodku
+  } else {
+    display.showNumberDec(displayTime);  // Zobrazenie bez dvojbodky
   }
 
   // Kontrola zmeny hodiny, okrem časov 23:00 až 05:00

@@ -10,6 +10,9 @@ WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600 * 2, 60000);  // UTC+1 časová zóna aktualizácia každú minútu
 
 // TM1637 settings
+// IF YOU GET ERROR, IT MYGHT ME CAUSED HERE
+// NO ERROR WHEN UPLOADING TO BOARD "D1 MINI ESP8266"
+// DELETE LETTER "D" FROM HERE DOWN IF U USING BOARD "NODEMCU ESP8266" 
 #define CLK_PIN  D5  // TM1637 CLK pin
 #define DIO_PIN  D7  // TM1637 DIO pin
 TM1637Display display(CLK_PIN, DIO_PIN);

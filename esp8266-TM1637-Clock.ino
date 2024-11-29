@@ -2,38 +2,78 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include <TM1637Display.h>
+#include <ArduinoJson.h>
+#include <TimeLib.h> // Pre prácu s časom
+#include <Timezone.h> // Pre správu letného a zimného času
 
-// NTP Client settings
-const char* ssid     = "YourSSID"; 
-const char* password = "YourPASS"; 
-WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 3600 * 2, 60000);  // UTC+1 časová zóna aktualizácia každú minútu
+// WiFi pripojenie
+const char* ssid     = "YourSSID";
+const char* password = "YourPASS";
 
-// TM1637 settings
-// IF YOU GET ERROR, IT MYGHT ME CAUSED HERE
-// NO ERROR WHEN UPLOADING TO BOARD "D1 MINI ESP8266"
-// DELETE LETTER "D" FROM HERE DOWN IF U USING BOARD "NODEMCU ESP8266" 
-#define CLK_PIN  D5  // TM1637 CLK pin
-#define DIO_PIN  D7  // TM1637 DIO pin
+// TM1637 displej
+#define CLK_PIN  D5
+#define DIO_PIN  D7
 TM1637Display display(CLK_PIN, DIO_PIN);
 
-// Buzzer pin
+// Bzučiak
 #define BUZZER_PIN D6
 
-bool colonVisible = true;  // Stav dvojbodky (viditeľná/neviditeľná)
-unsigned long previousMillis = 0; // Čas posledného preklopenia stavu dvojbodky
-const long interval = 1000; // Interval na preklopenie stavu dvojbodky (1 sekunda)
+// NTP Client
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000); // Offset sa nastaví dynamicky
 
-String previousHour = "";  // Premenná na uloženie predchádzajúcej hodiny
-bool buzzedAt550 = false;  // Indikátor, či už bzučiak bzučal o 5:50
+// Časové pásmo a pravidlá letného/zimného času
+TimeChangeRule CEST = {"CEST", Last, Sun, Mar, 2, 120}; // Central European Summer Time (UTC+2)
+TimeChangeRule CET = {"CET ", Last, Sun, Oct, 3, 60};   // Central European Standard Time (UTC+1)
+Timezone myTZ(CEST, CET);  // Časová zóna pre strednú Európu (prispôsobte podľa vašej lokality)
+
+// Premenné pre displej
+bool colonVisible = true;
+unsigned long previousMillis = 0;
+const long interval = 1000;
+
+String previousHour = "";
+bool buzzedAt550 = false;
+
+// Funkcia na načítanie časového pásma cez IP-API
+void fetchTimezoneOffset() {
+  WiFiClient client;
+  if (client.connect("ip-api.com", 80)) {
+    client.println("GET /json HTTP/1.1");
+    client.println("Host: ip-api.com");
+    client.println("Connection: close");
+    client.println();
+
+    String response = "";
+    while (client.connected() || client.available()) {
+      response += client.readString();
+    }
+    client.stop();
+
+    // Parsovanie JSON odpovede
+    StaticJsonDocument<1024> doc;
+    deserializeJson(doc, response);
+    if (doc["status"] == "success") {
+      String timezone = doc["timezone"];
+      Serial.println("Detected timezone: " + timezone);
+
+      // Tu by ste mohli nastaviť inú časovú zónu na základe detekovaného časového pásma,
+      // napr. myTZ nastavte podľa krajiny.
+    } else {
+      Serial.println("Failed to fetch timezone. Using default Central European Time.");
+    }
+  } else {
+    Serial.println("Connection to IP-API failed.");
+  }
+}
 
 void setup() {
   Serial.begin(115200);
 
-  // Initialize TM1637 display
-  display.setBrightness(0x0f);  // Nastavenie intenzity svietenia
+  // Inicializácia displeja
+  display.setBrightness(0x0f);
 
-  // Connect to Wi-Fi
+  // Pripojenie k WiFi
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
@@ -41,65 +81,66 @@ void setup() {
   }
   Serial.println("Connected to WiFi");
 
-  // Initialize NTPClient
+  // Načítanie časového pásma
+  fetchTimezoneOffset();
+
+  // Inicializácia NTP klienta
   timeClient.begin();
 
-  // Set up buzzer pin
+  // Nastavenie bzučiaka
   pinMode(BUZZER_PIN, OUTPUT);
 }
 
 void loop() {
   timeClient.update();
 
-  // Získanie formátovaného času (HH:MM:SS)
-  String formattedTime = timeClient.getFormattedTime();
+  // Získanie aktuálneho UTC času z NTP
+  time_t rawTime = timeClient.getEpochTime();
+  // Prevod na lokálny čas (s letným/zimným časom)
+  time_t localTime = myTZ.toLocal(rawTime);
 
-  // Extrahovanie hodín a minút
-  String hours = formattedTime.substring(0, 2);
-  String minutes = formattedTime.substring(3, 5);
+  // Extrakcia hodín a minút
+  int hours = hour(localTime);
+  int minutes = minute(localTime);
 
-  // Kontrola času a preklopenie stavu dvojbodky
+  // Preklopenie dvojbodky
   unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval) {
     previousMillis = currentMillis;
-    colonVisible = !colonVisible;  // Zmena stavu dvojbodky
+    colonVisible = !colonVisible;
   }
 
-  // Zobrazenie času s alebo bez dvojbodky na TM1637 displeji
-  int displayTime = (hours.toInt() * 100) + minutes.toInt();
-  
-  // Zobrazenie s dvojbodkou medzi hodinami a minútami
+  // Zobrazenie času na displeji
+  int displayTime = (hours * 100) + minutes;
   if (colonVisible) {
-    display.showNumberDecEx(displayTime, 0x40, true); // 0x40 maska pre dvojbodku
+    display.showNumberDecEx(displayTime, 0x40, true);
   } else {
-    display.showNumberDec(displayTime);  // Zobrazenie bez dvojbodky
+    display.showNumberDec(displayTime);
   }
 
-  // Kontrola zmeny hodiny, okrem časov 23:00 až 05:00
-  if (previousHour != hours) {
-    previousHour = hours;
-    buzzedAt550 = false;  // Reset indikátora po každej hodine
+  // Kontrola zmeny hodiny
+  if (previousHour != String(hours)) {
+    previousHour = String(hours);
+    buzzedAt550 = false;
 
-    int hourInt = hours.toInt();
-    if (hourInt < 23 && hourInt >= 6) {
-      // Zabzučanie bzučiaku 2x rýchlo
+    if (hours < 23 && hours >= 6) {
       for (int i = 0; i < 2; i++) {
         digitalWrite(BUZZER_PIN, HIGH);
-        delay(200);  // Zapnutie bzučiaku na 200 ms
+        delay(200);
         digitalWrite(BUZZER_PIN, LOW);
-        delay(200);  // Pauza medzi zapnutím
+        delay(200);
       }
     }
   }
 
   // Kontrola na čas 5:50 a zabezpečenie, že bzučiak zabzučí len raz
-  if (hours == "05" && minutes == "50" && !buzzedAt550) {
-    buzzedAt550 = true;  // Nastavenie indikátora, aby sa sekvencia nevykonala viackrát
+  if (hours == 5 && minutes == 50 && !buzzedAt550) {
+    buzzedAt550 = true;
     for (int i = 0; i < 10; i++) {
       digitalWrite(BUZZER_PIN, HIGH);
-      delay(1000);  // Zapnutie bzučiaku na 1 sekundu
+      delay(1000);
       digitalWrite(BUZZER_PIN, LOW);
-      delay(1000);  // Pauza na 1 sekundu
+      delay(1000);
     }
   }
 }

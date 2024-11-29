@@ -1,4 +1,4 @@
-# Arduino.-TM1637-4in1-Display
+# Arduino-TM1637-4in1-Display
 ## visiors came to check repo
 <div align="center" height: 200px; width: 50px;>
   <img src="https://komarev.com/ghpvc/?username=Fattcat&style=flat-square" alt="Visitor Badge">

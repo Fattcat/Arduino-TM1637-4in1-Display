@@ -4,6 +4,7 @@
   <img src="https://komarev.com/ghpvc/?username=Fattcat&style=flat-square" alt="Visitor Badge">
 </div>
 Basic Codes for 4 in 1 TM1637 Display.
+
 # Connection
 - VCC -> 3.3V
 - GND -> GND

@@ -5,7 +5,7 @@
 </div>
 Basic Codes for 4 in 1 TM1637 Display.
 # Connection
-VCC -> 3.3V
-GND -> GND
-CLK -> D5
-DIO -> D7
+- VCC -> 3.3V
+- GND -> GND
+- CLK -> D5
+- DIO -> D7
